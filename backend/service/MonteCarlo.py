@@ -13,7 +13,7 @@ def portfolioPerformance(weights, meanReturns, covMatrix, Time):
 
 #TODO: Refactor - Extract Method 
 def calcualteCVar(stockList, initialPortfolio, holdingPeriodInDays):
-    stocks = [stock+'.AX' for stock in stockList]
+    stocks = [stock for stock in stockList]
     endDate = datetime.datetime.now()
     startDate = endDate - datetime.timedelta(days=holdingPeriodInDays)
 
@@ -27,28 +27,28 @@ def calcualteCVar(stockList, initialPortfolio, holdingPeriodInDays):
     print(returns)
    
     # Monte Carlo Method
-    numberOfSimulations = 10000 # number of simulations
-    T = 100 #timeframe in days
+    numberOfSimulations = 1000 # number of simulations
+    T = holdingPeriodInDays #timeframe in days
 
     meanM = numpy.full(shape=(T, len(weights)), fill_value=meanReturns)
     meanM = meanM.T
 
-    portfolio_sims = numpy.full(shape=(T, numberOfSimulations), fill_value=0.0)
+    portfolioSimulation = numpy.full(shape=(T, numberOfSimulations), fill_value=0.0)
 
     for m in range(0, numberOfSimulations):
         # MC loops
         Z = numpy.random.normal(size=(T, len(weights)))
         L = numpy.linalg.cholesky(covMatrix)
         dailyReturns = meanM + numpy.inner(L, Z)
-        portfolio_sims[:,m] = numpy.cumprod(numpy.inner(weights, dailyReturns.T)+1)*initialPortfolio
-        portResults = pd.Series(portfolio_sims[-1,:])
+        portfolioSimulation[:,m] = numpy.cumprod(numpy.inner(weights, dailyReturns.T)+1)*initialPortfolio
+        portResults = pd.Series(portfolioSimulation[-1,:])
 
-        VaR = initialPortfolio - mcVaR(portResults, alpha=5)
-        CVaR = initialPortfolio - mcCVaR(portResults, alpha=5)
-        
+        valueAtRisk = initialPortfolio - mcVaR(portResults, alpha=5)
+        conditionalValueAtRisk = initialPortfolio - mcCVaR(portResults, alpha=5)
+    # print(portfolioSimulation)
     # print('VaR ${}'.format(round(VaR,2)))
     # print('CVaR ${}'.format(round(CVaR,2)))
-    response = ValueAtRisk(VaR, CVaR)
+    response = ValueAtRisk(valueAtRisk, conditionalValueAtRisk, portfolioSimulation.tolist())
     return json.dumps(response.__dict__) 
      
 

@@ -9,6 +9,7 @@
 ## How to start
 
 
-Build with Python and Angular 
+Build with Python, Pandas, Numpy, React, AG Grid and Tailwind CSS 
+
 
 Work in progress
