@@ -43,3 +43,8 @@ Thumbs.db
 
 # Python
 *.pyc
+
+
+flask.err.log
+flask.log
+flask.out.log

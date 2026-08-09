@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AllCommunityModule, ColDef, ColGroupDef, ModuleRegistry } from 'ag-grid-community';
 import { AgGridReact } from 'ag-grid-react'; // React Data Grid Component
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
@@ -20,10 +20,9 @@ interface StockPrice {
 
 export const CVarSimulation = () => {
     const [rowData, setRowData] = useState<StockPrice[]>();
-    const [portfolioSimulation, setPortfolioSimulation] = useState<[]>();
     const [agChartOptions, setAgChartOptions] = useState<AgChartOptions>();
 
-    const setChartOption = (portfolioSimulationData : []) : AgChartOptions => {
+    const setChartOption = (portfolioSimulationData : any[]) : AgChartOptions => {
         let series : any  = [];
 
         for (let i = 0; i < 1000; i++) {
@@ -49,7 +48,7 @@ export const CVarSimulation = () => {
 
 
     // Column Definitions: Defines the columns to be displayed.
-    const [colDefs, setColDefs] = useState<(ColDef<any> | ColGroupDef<any>)[]>([
+    const [colDefs] = useState<(ColDef<any> | ColGroupDef<any>)[]>([
         { headerName: "Date", field: "datetime" },
         { headerName: "Closing Price", field: "close" },
         { headerName: "High", field: "high" },
@@ -87,15 +86,13 @@ export const CVarSimulation = () => {
         })
     }
 
-    const mapPortfolioSimulationData = (data: []) => {
-        let simulationResult: [] = []
-         let i = 1;
-        data.portfolioSimulation.map(simulation => {
+    const mapPortfolioSimulationData = (data: any) => {
+        let simulationResult: any[] = []
+        let i = 1;
+        data.portfolioSimulation.map((simulation: any) => {
             simulationResult.push(Object.assign({day: i++}, simulation))
         })
 
-        setPortfolioSimulation(simulationResult)
-        console.log(simulationResult)
         return simulationResult
     }
 
@@ -104,27 +101,38 @@ export const CVarSimulation = () => {
         myHeaders.append("X-Version", "1.0.0");
         myHeaders.append("Content-Type", "application/json");
 
-        var raw = JSON.stringify({
-            "stocks": [
-                "MSFT"
-            ],
-            "days": 9
-        });
-
-        var requestOptions: RequestInit = {
+        var closingPriceRequestOptions: RequestInit = {
             method: 'POST',
             headers: myHeaders,
-            body: raw,
+            body: JSON.stringify({
+                "stocks": [
+                    "MSFT"
+                ],
+                "days": 9
+            }),
             redirect: 'follow'
         };
 
-        fetch("http://127.0.0.1:5000/api/closingPrice", requestOptions)
+        var cvarRequestOptions: RequestInit = {
+            method: 'POST',
+            headers: myHeaders,
+            body: JSON.stringify({
+                "stocks": [
+                    "MSFT"
+                ],
+                "initialPortfolio": 10000,
+                "holdingPeriodInDays": 9
+            }),
+            redirect: 'follow'
+        };
+
+        fetch("http://127.0.0.1:5000/api/closingPrice", closingPriceRequestOptions)
             .then(response => response.json())
             .then(result => testMapping(result))
             .catch(error => console.log('error', error));
 
 
-        fetch("http://127.0.0.1:5000/api/cvarCalculation", requestOptions)
+        fetch("http://127.0.0.1:5000/api/cvarCalculation", cvarRequestOptions)
             .then(response => response.json())
             .then(result => mapPortfolioSimulationData(result))
             .then(result => setAgChartOptions(setChartOption(result)))

@@ -1,9 +1,8 @@
 from urllib import response
-import pandas as pd
 import numpy as numpy
 import datetime as datetime
 import adapter.YahooFinanceData as yahooFinanceData
-import json 
+import orjson
 from service.model.ValueAtRisk import ValueAtRisk
 
 def portfolioPerformance(weights, meanReturns, covMatrix, Time):
@@ -23,9 +22,6 @@ def calcualteCVar(stockList, initialPortfolio, holdingPeriodInDays):
     weights = numpy.random.random(len(returns.columns))
     weights /= numpy.sum(weights)
 
-    returns['portfolio'] = returns.dot(weights)
-    print(returns)
-   
     # Monte Carlo Method
     numberOfSimulations = 1000 # number of simulations
     T = holdingPeriodInDays #timeframe in days
@@ -33,42 +29,46 @@ def calcualteCVar(stockList, initialPortfolio, holdingPeriodInDays):
     meanM = numpy.full(shape=(T, len(weights)), fill_value=meanReturns)
     meanM = meanM.T
 
-    portfolioSimulation = numpy.full(shape=(T, numberOfSimulations), fill_value=0.0)
+    # Cholesky factor of the covariance matrix is the same for every
+    # simulation, so it only needs to be computed once.
+    L = numpy.linalg.cholesky(covMatrix)
 
-    for m in range(0, numberOfSimulations):
-        # MC loops
-        Z = numpy.random.normal(size=(T, len(weights)))
-        L = numpy.linalg.cholesky(covMatrix)
-        dailyReturns = meanM + numpy.inner(L, Z)
-        portfolioSimulation[:,m] = numpy.cumprod(numpy.inner(weights, dailyReturns.T)+1)*initialPortfolio
-        portResults = pd.Series(portfolioSimulation[-1,:])
+    # Generate all simulations' random shocks at once and evolve every
+    # path in a single vectorized computation instead of looping in
+    # Python (equivalent to per-simulation meanM + L @ Z.T, stacked over
+    # the simulation axis m).
+    Z = numpy.random.normal(size=(numberOfSimulations, T, len(weights)))
+    dailyReturns = meanM + numpy.einsum('ik,mjk->mij', L, Z)
+    portfolioDailyReturns = numpy.einsum('n,mnt->mt', weights, dailyReturns)
+    portfolioSimulation = numpy.ascontiguousarray(
+        (numpy.cumprod(portfolioDailyReturns + 1, axis=1) * initialPortfolio).T
+    )
 
-        valueAtRisk = initialPortfolio - mcVaR(portResults, alpha=5)
-        conditionalValueAtRisk = initialPortfolio - mcCVaR(portResults, alpha=5)
-    # print(portfolioSimulation)
-    # print('VaR ${}'.format(round(VaR,2)))
-    # print('CVaR ${}'.format(round(CVaR,2)))
-    response = ValueAtRisk(valueAtRisk, conditionalValueAtRisk, portfolioSimulation.tolist())
-    return json.dumps(response.__dict__) 
-     
+    portResults = portfolioSimulation[-1, :]
+    valueAtRisk = initialPortfolio - mcVaR(portResults, alpha=5)
+    conditionalValueAtRisk = initialPortfolio - mcCVaR(portResults, alpha=5)
+
+    response = ValueAtRisk(conditionalValueAtRisk, valueAtRisk, portfolioSimulation)
+    return orjson.dumps(response.__dict__, option=orjson.OPT_SERIALIZE_NUMPY).decode('utf-8')
+
 
 def mcVaR(returns, alpha=5):
-    """ Input: pandas series of returns
+    """ Input: numpy array of returns
         Output: percentile on return distribution to a given confidence level alpha
     """
-    if isinstance(returns, pd.Series):
+    if isinstance(returns, numpy.ndarray):
         return numpy.percentile(returns, alpha)
     else:
-        raise TypeError("Expected a pandas data series.")
+        raise TypeError("Expected a numpy array.")
 
 def mcCVaR(returns, alpha=5):
-    """ Input: pandas series of returns
+    """ Input: numpy array of returns
         Output: CVaR or Expected Shortfall to a given confidence level alpha
     """
-    if isinstance(returns, pd.Series):
+    if isinstance(returns, numpy.ndarray):
         belowVaR = returns <= mcVaR(returns, alpha=alpha)
         return returns[belowVaR].mean()
     else:
-        raise TypeError("Expected a pandas data series.")
+        raise TypeError("Expected a numpy array.")
 
 
